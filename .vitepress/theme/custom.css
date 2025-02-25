@@ -1,0 +1,96 @@
+/* Line up the flame logo with the text */
+.logo {
+  padding-bottom: 0.25rem;
+  height: 2rem;
+  width: 1.3rem;
+}
+
+:root {
+  /* Text colors */
+  --vp-c-brand-1: hsl(218, 69%, 52%);
+  --vp-c-brand-2: var(--vp-c-brand-1);
+  --vp-c-text-1: rgb(51, 51, 51);
+  --vp-c-text-2: var(--vp-c-text-1);
+  --vp-c-text-3: rgb(82, 89, 125);
+
+  /* Background colors */
+  --vp-c-bg: rgb(219, 219, 219);
+  --vp-c-bg-alt: rgb(194, 194, 194);
+  --vp-c-bg-elv: var(--vp-nav-bg-color);
+  --vp-c-bg-soft: var(--vp-nav-bg-color);
+  --vp-code-block-bg: rgb(26, 27, 38);
+
+  /* Nav/sidebar colors */
+  --vp-nav-bg-color: rgb(219, 219, 219, 0.99);
+  --vp-sidebar-bg-color: rgb(219, 219, 219, 0.0);
+  --vp-local-nav-bg-color: var(--vp-nav-bg-color);
+  --vp-nav-screen-bg-color: var(--vp-nav-bg-color);
+
+  /* Border/divider colors */
+  --vp-c-divider: var(--vp-c-bg);
+  --vp-c-border: var(--vp-c-bg);
+  --vp-c-gutter: var(--vp-c-bg);
+}
+
+/* Modify dark mode colors propagating vars the same as light mode */
+.dark {
+  --vp-c-text-1: rgb(174, 174, 174);
+  --vp-c-bg: rgb(18, 17, 22);
+  --vp-c-bg-alt: rgb(22, 22, 24);
+  --vp-nav-bg-color: rgba(18, 17, 22, 0.99);
+  --vp-code-block-bg: rgb(14, 15, 21);
+  --vp-code-block-fg: rgb(168 177 214);
+  --vp-sidebar-bg-color: rgb(18, 17, 22, 0);
+}
+
+/* Light mode default text color in unrecognized code blocks */
+html:not(.dark) .vp-code span {
+    color: rgb(168 177 214);
+}
+
+/* Fix mismatched colors */
+.VPNav {
+    background-color: var(--vp-nav-bg-color);
+}
+.VPSidebar.open {
+  background-color: var(--vp-nav-bg-color);
+}
+
+/* Colored background blur effect in dark mode */
+.dark .vp-doc::before {
+  /* Disable color background blocking user interaction */
+  user-select: none;
+  pointer-events: none;
+  content: "";
+  position: absolute;
+  filter: blur(100px);
+  opacity: 0.1;
+  background-color: var(--vp-c-brand-1);
+  width: 100%;
+  height: 100%;
+}
+
+/* Nice underline animation on link hover */
+.vp-doc a {
+  text-decoration: none;
+  position: relative;
+}
+.vp-doc a:hover {
+  color: var(--vp-c-brand-1);
+}
+.vp-doc a::before {
+  content: '';
+  transform: scaleX(0);
+  transform-origin: bottom right;
+  transition: transform 0.25s ease-out;
+  position: absolute;
+  width: 100%;
+  height: 2px;
+  bottom: 1px;
+  left: 0;
+  background-color: var(--vp-c-brand-1);
+}
+.vp-doc a:hover::before {
+  transform: scaleX(1);
+  transform-origin: bottom left;
+}

@@ -1,0 +1,18 @@
+{
+  "name": "intro-to-gpu",
+  "version": "0.0.1",
+  "description": "Intro to GPU",
+  "type": "module",
+  "author": "Jack Clayton <jack@modular.com>",
+  "repository": "https://github.com/jackos/jackos.github.io",
+  "scripts": {
+    "build": "vitepress build",
+    "dev": "vitepress dev --port 3000",
+    "dev-host": "vitepress dev --port 3000 --host",
+    "serve": "vitepress serve --port 3001"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.5",
+    "vitepress": "1.6.3"
+  }
+}
