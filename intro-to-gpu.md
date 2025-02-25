@@ -1,6 +1,6 @@
 ---
 type: article
-title: Introduction to GPUs
+title: Intro to GPU
 description: An introduction to programming GPUs
 date: 2025-02-24
 tag: intro-to-gpu
@@ -219,7 +219,7 @@ We now have a host buffer that we can copy to the GPU:
 var in_dev = ctx.enqueue_create_buffer[dtype](in_bytes)
 
 # Copy the data from the CPU to the GPU buffer
-ctx.enqueue_copy_to_device(in_dev, in_host.unsafe_ptr())
+ctx.enqueue_copy(in_dev, in_host)
 ```
 
 Creating the GPU buffer is allocating `global memory` which can be accessed from any block and thread, this memory is relatively slow compared to `shared memory` which is shared between blocks, more on that later.
@@ -289,17 +289,17 @@ ctx.enqueue_function[multiply_kernel[2]](
 ctx.synchronize()
 
 # Copy data back to host and print as 2D array
-ctx.enqueue_copy_from_device[dtype](in_host.unsafe_ptr(), in_dev)
+ctx.copy(in_host, in_dev)
 var host_tensor = LayoutTensor[dtype, layout](in_host.unsafe_ptr())
 print(host_tensor)
 _ = in_host.unsafe_ptr()
 ```
 
 ```text
-0 1 2 3
-4 5 6 7
-8 9 10 11
-12 13 14 15
+0 2 4 6 
+8 10 12 14 
+16 18 20 22 
+24 26 28 30 
 ```
 
 Congratulations! You've successfully run a kernel that modifies values from your GPU, and printed the result on your CPU. You can see above that each thread multiplied a single value by 2 in parallel on the GPU, and copied the result back to the CPU.
@@ -320,6 +320,7 @@ var out_dev = ctx.enqueue_create_buffer[dtype](blocks)
 
 # Also create a buffer for the host
 var out_host = ctx.enqueue_create_host_buffer[dtype](blocks)
+
 ctx.synchronize()
 ```
 
@@ -368,8 +369,7 @@ ctx.enqueue_function[sum_reduce_kernel](
 ctx.synchronize()
 
 # Copy the data back to the host and print out the SIMD vector
-ctx.enqueue_copy_from_device(out_host.unsafe_ptr(), out_dev)
-ctx.synchronize()
+ctx.copy(out_host, out_dev)
 print(out_host.unsafe_ptr().load[width=blocks]())
 ```
 
@@ -408,8 +408,7 @@ ctx.enqueue_function[simd_reduce_kernel](
 ctx.synchronize()
 
 # Ensure we have the same result
-ctx.enqueue_copy_from_device(out_host.unsafe_ptr(), out_dev)
-ctx.synchronize()
+ctx.copy(out_host, out_dev)
 print(out_host.unsafe_ptr().load[width=blocks]())
 ```
 
@@ -456,8 +455,7 @@ ctx.enqueue_function[warp_reduce_kernel](
 ctx.synchronize()
 
 # Ensure we have the same result
-ctx.enqueue_copy_from_device(out_host.unsafe_ptr(), out_dev)
-ctx.synchronize()
+ctx.copy(out_host, out_dev)
 print(out_host.unsafe_ptr().load[width=blocks]())
 ```
 
@@ -523,8 +521,7 @@ ctx.enqueue_function[custom_warp_reduce_kernel](
 
 # Check our new result
 print("Block 0 reduction steps:")
-ctx.enqueue_copy_from_device(out_host.unsafe_ptr(), out_dev)
-ctx.synchronize()
+ctx.copy(out_host, out_dev)
 
 print("\nAll blocks reduced output buffer:")
 print(out_host.unsafe_ptr().load[width=blocks]())
