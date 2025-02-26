@@ -141,14 +141,14 @@ block: [ 0 1 0 ] thread: [ 0 0 0 ]
 block: [ 0 1 0 ] thread: [ 1 0 0 ]
 ```
 
-We're still launching 8 (2x2x2) threads, where there are 4 blocks, each with 2 threads. In GPU programming this grouping of blocks and threads is important, each block has can have its own fast shared VRAM (Video Random Access Memory) which allows threads to communicate. The threads within a block can also communicate by through registers, we'll cover this concept when we get to `warps`. For now the important imformation to internalize is:
+We're still launching 8 (2x2x2) threads, where there are 4 blocks, each with 2 threads. In GPU programming this grouping of blocks and threads is important, each block has can have its own fast shared VRAM (Video Random Access Memory) which allows threads to communicate. The threads within a block can also communicate by through registers, we'll cover this concept when we get to `warps`. For now the important information to internalize is:
 
 - `grid_dim` defines how many blocks are launched
 - `block_dim` defines how many threads are launched in each block
 
 ## Tiles
 
-The x, y, z dimensions of blocks are important for splitting up large jobs into `tiles` so each thread can work on its own subset of the problem. Lets vizualize how a contiguous array of data can be split up into tiles, if we have an array of UInt8 (Unsigned Integer 8bit) data like:
+The x, y, z dimensions of blocks are important for splitting up large jobs into `tiles` so each thread can work on its own subset of the problem. Lets visualize how a contiguous array of data can be split up into tiles, if we have an array of UInt8 (Unsigned Integer 8bit) data like:
 
 ```plaintext
 [ 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 ]
@@ -226,7 +226,7 @@ Creating the GPU buffer is allocating `global memory` which can be accessed from
 
 ## Tensor indexing from threads
 
-Now that we have the data set up, we can wrap the data in a `LayoutTensor` so that we can reason about how to index into the array, allowing each thread to get its corrosponding value:
+Now that we have the data set up, we can wrap the data in a `LayoutTensor` so that we can reason about how to index into the array, allowing each thread to get its corresponding value:
 
 ```mojo
 from layout import Layout, LayoutTensor
@@ -271,9 +271,9 @@ block: 1 thread: 2 val: 6
 block: 1 thread: 3 val: 7
 ```
 
-As in the vizualization above, the block/thread is getting the corrosponding value that we expect. You can see `block: 3 thread: 3` has the last value 15.
+As in the visualization above, the block/thread is getting the corresponding value that we expect. You can see `block: 3 thread: 3` has the last value 15.
 
-## Mulitply Kernel
+## Multiply Kernel
 
 Now that we've verified we're getting the correct values when indexing, lets launch a kernel to multiply each value:
 
@@ -323,7 +323,7 @@ var out_host = ctx.enqueue_create_host_buffer[dtype](blocks)
 ctx.synchronize()
 ```
 
-The problem here is that we can't have all the threads summing their values into the same index in the output buffer as that will introduce race conditions. We're going to intoduce new concepts to deal with this.
+The problem here is that we can't have all the threads summing their values into the same index in the output buffer as that will introduce race conditions. We're going to introduce new concepts to deal with this.
 
 ## Shared memory
 
@@ -347,7 +347,7 @@ fn sum_reduce_kernel(
         alignment = sizeof[dtype](),
     ]()
 
-    # Place the corrosponding value into shared memory
+    # Place the corresponding value into shared memory
     shared[thread_idx.x] = tensor[block_idx.x, thread_idx.x][0]
 
     # Await all the threads to finish loading their values into shared memory
@@ -363,7 +363,7 @@ ctx.enqueue_function[sum_reduce_kernel](
     out_dev,
     grid_dim=blocks,
     block_dim=threads,
-    shared_mem_bytes=blocks * sizeof[dtype](), # Shared memory betwee blocks
+    shared_mem_bytes=blocks * sizeof[dtype](), # Shared memory between blocks
 )
 ctx.synchronize()
 
@@ -390,7 +390,7 @@ And the reduction resulted in the output having the sum of 6 in the first positi
 
 ## Thread level SIMD
 
-We could skip using shared memory altogether using SIMD instructions, this is a faster option to consider if it suits your problem. Each thread has access to SIMD registers which can perform operations on a vector such as reductions. Here we'll be launching one thread per block, loading the 4 corrosponding values from that block as a SIMD vector, and summing them together in a single operation:
+We could skip using shared memory altogether using SIMD instructions, this is a faster option to consider if it suits your problem. Each thread has access to SIMD registers which can perform operations on a vector such as reductions. Here we'll be launching one thread per block, loading the 4 corresponding values from that block as a SIMD vector, and summing them together in a single operation:
 
 ```mojo :once
 fn simd_reduce_kernel(
