@@ -292,7 +292,6 @@ ctx.synchronize()
 ctx.copy(in_host, in_dev)
 var host_tensor = LayoutTensor[dtype, layout](in_host.unsafe_ptr())
 print(host_tensor)
-_ = in_host.unsafe_ptr()
 ```
 
 ```text
@@ -481,7 +480,6 @@ ctx.enqueue_function[warp_print_kernel](
     block_dim=threads,
 )
 ctx.synchronize()
-_ = in_dev.unsafe_ptr()
 ```
 
 ```text
