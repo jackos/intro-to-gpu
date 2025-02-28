@@ -4,7 +4,7 @@
   "description": "Intro to GPU",
   "type": "module",
   "author": "Jack Clayton <jack@modular.com>",
-  "repository": "https://github.com/jackos/jackos.github.io",
+  "repository": "https://github.com/jackos/intro-to-gpu",
   "scripts": {
     "build": "vitepress build",
     "dev": "vitepress dev --port 3000",

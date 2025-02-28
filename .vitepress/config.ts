@@ -1,8 +1,9 @@
 import { defineConfig } from 'vitepress'
 
-const hostname: string = 'https://jackos.github.io'
+const hostname: string = 'https://jackos.github.io/intro-to-gpu'
 
 export default defineConfig({
+    base: "/intro-to-gpu/",
     appearance: "dark",
     lastUpdated: true,
     outDir: 'dist',
@@ -24,7 +25,7 @@ export default defineConfig({
             { icon: 'linkedin', link: 'https://www.linkedin.com/in/jackclayton/' },
         ],
         editLink: {
-            pattern: 'https://github.com/jackos/jackos.github.io/edit/main/:path',
+            pattern: 'https://github.com/jackos/intro-to-gpu/edit/main/:path',
             text: 'Edit this page on GitHub',
         },
         nav: [
