@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://jackos.github.io/sitemap.xml
+Sitemap: https://jackos.github.io/intro-to-gpu/sitemap.xml

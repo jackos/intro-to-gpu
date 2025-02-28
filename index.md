@@ -186,7 +186,7 @@ mojo 25.1.0.dev2025020905
 
 ## Running Mojo in a notebook
 
-If you clone the repo at https://github.com/jackos/jackos.github.io and install the vscode extension `Markdown Lab` you can run the markdown that generated this website like a notebook, without installing jupyter.
+If you clone the repo at <https://github.com/jackos/intro-to-gpu> and install the vscode extension `Markdown Lab` you can run the markdown that generated this website like a notebook, without installing jupyter.
 
 ## Next Steps
 

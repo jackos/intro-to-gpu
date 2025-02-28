@@ -15,8 +15,8 @@ Instead of going over theory first, we're going to dive straight into writing GP
 All of these notebook cells are runnable through a VS Code extension. First install [Markdown Lab](https://marketplace.visualstudio.com/items?itemName=jackos.mdlab), then clone the repo that contains the markdown that generated this website:
 
 ```sh
-git clone git@github.com:jackos/jackos.github.io.git
-cd jackos.github.io.git
+git clone git@github.com:jackos/intro-to-gpu
+cd intro-to-gpu
 ```
 
 And open `intro-to-gpu.md`, then you can run the code cells interactively.
@@ -173,7 +173,7 @@ print()
 ```
 
 ```text
-0 1 2 3 
+0 1 2 3
 ```
 
 ## Blocks
@@ -361,10 +361,10 @@ print(host_tensor)
 ```
 
 ```text
-0 2 4 6 
-8 10 12 14 
-16 18 20 22 
-24 26 28 30 
+0 2 4 6
+8 10 12 14
+16 18 20 22
+24 26 28 30
 ```
 
 Congratulations! You've successfully run a kernel that modifies values from your GPU, and printed the result on your CPU. You can see above that each thread multiplied a single value by 2 in parallel on the GPU, and copied the result back to the CPU.
