@@ -76,14 +76,10 @@ ctx.synchronize()
 ```
 
 ```text
-Block 0 reduction steps:
-
-All blocks reduced output buffer:
-[6, 0, 22, 0]
-thread: 0 value: 0 result: 6
-thread: 1 value: 1 result: 6
-thread: 2 value: 2 result: 5
-thread: 3 value: 3 result: 3
+GPU thread: [ 0 0 0 ]
+GPU thread: [ 1 0 0 ]
+GPU thread: [ 2 0 0 ]
+GPU thread: [ 3 0 0 ]
 ```
 
 ## Threads
@@ -114,22 +110,22 @@ We're now launching 8 (2x2x2) threads in total.
 
 You'll see the word `host` which refers to the CPU that schedules work for the `device`, `device` refers to the accelerator which in this case is a GPU.
 
-If you see the `enqueue` word in a method or function call it means the `host` is scheduling it run on the `device`. You must call `ctx.synchronize` if code you're running on the `host` is dependent on the result of the `device` enqueued calls. For example, if you were to print from the CPU without first calling `synchronize`, you'll see out-of-order printing:
+If you see the `enqueue` word in a method or function call it means the `host` is scheduling it run on the `device`. You must call `ctx.synchronize` if code you're running on the `host` is dependent on the result of the `device` enqueued calls. For example, if you were to print from the CPU without first calling `synchronize`, you could see out-of-order printing:
 
 ```mojo :once
 ctx.enqueue_function[printing_kernel](grid_dim=1, block_dim=4)
-print("This will finish before the GPU has completed its work")
+print("This might finish before the GPU has completed its work")
 ```
 
 ```text
-This will finish before the GPU has completed its work
+This might finish before the GPU has completed its work
 GPU thread: [ 0 0 0 ]
 GPU thread: [ 1 0 0 ]
 GPU thread: [ 2 0 0 ]
 GPU thread: [ 3 0 0 ]
 ```
 
-In the above example we failed to call `synchronize` before printing on the `host`, the `device` will be slightly slower to finish its work, so you see that output after the `host` output. Let's add a `synchronize`:
+In the above example we failed to call `synchronize` before printing on the `host`, the `device` could be slightly slower to finish its work, so you might see that output after the `host` output. Let's add a `synchronize`:
 
 ```mojo :once
 ctx.enqueue_function[printing_kernel](grid_dim=1, block_dim=4)
@@ -162,7 +158,6 @@ ctx.enqueue_function[dummy_kernel](dev_buffer, grid_dim=1, block_dim=size)
 dev_buffer.enqueue_copy_to(host_buffer)
 # All of the above calls run in the order that they were enqueued
 
-
 # Have to synchronize here before printing on CPU, or else the kernel will
 # not have finished execcuting.
 ctx.synchronize()
@@ -173,7 +168,7 @@ print()
 ```
 
 ```text
-0 1 2 3
+0 1 2 3 
 ```
 
 ## Blocks
@@ -303,7 +298,7 @@ alias layout = Layout.row_major(blocks, threads)
 var tensor = LayoutTensor[dtype, layout](in_dev)
 ```
 
-This `LayoutTensor` is a mutable view over the data stored inside `in_dev`, it doesn't own its memory but allows us to index using block and thread ids. Initially we'll just print the values to confirm its indexing as we expect:
+This `LayoutTensor` is a wrapper over the data stored inside `in_dev`, it doesn't own its memory but allows us to index using block and thread ids. Initially we'll just print the values to confirm its indexing as we expect:
 
 ```mojo :once
 fn print_values_kernel(tensor: LayoutTensor[dtype, layout]):
@@ -361,10 +356,10 @@ print(host_tensor)
 ```
 
 ```text
-0 2 4 6
-8 10 12 14
-16 18 20 22
-24 26 28 30
+0 2 4 6 
+8 10 12 14 
+16 18 20 22 
+24 26 28 30 
 ```
 
 Congratulations! You've successfully run a kernel that modifies values from your GPU, and printed the result on your CPU. You can see above that each thread multiplied a single value by 2 in parallel on the GPU, and copied the result back to the CPU.
