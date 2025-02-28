@@ -369,7 +369,7 @@ Congratulations! You've successfully run a kernel that modifies values from your
 We're going to set up a new buffer which will have all the reduced values with the sum of each thread in the block:
 
 ```plaintext
-Output: [ block[0] block[0] block[1] block[1] ]
+Output: [ block[0] block[1] block[2] block[3] ]
 ```
 
 Set up the output buffer for the host and device:
@@ -611,4 +611,4 @@ Now that you've learnt some of the core primitives for GPU programming, here are
 4. Launch a GPU kernel with 8 blocks and 4 threads that takes every value and raises it to the power of 2 using x**2, then does a reduction using your preferred method to write to the output buffer.
 5. Copy the device buffer to the host buffer, and print it out on the CPU.
 
-Next chapter coming soon!
+The next chapter coming soon, in the meantime you can check out some [GPU programming examples here](https://github.com/modular/max/tree/main/examples/gpu_functions).
