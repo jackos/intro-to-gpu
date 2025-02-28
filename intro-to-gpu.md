@@ -254,23 +254,23 @@ alias dtype = DType.uint32
 alias blocks = 4
 alias threads = 4
 # One value per thread
-alias in_bytes = blocks * threads
+alias in_els = blocks * threads
 
 # Allocate data on the host and return a buffer which owns that data
-var in_host = ctx.enqueue_create_host_buffer[dtype](in_bytes)
+var in_host = ctx.enqueue_create_host_buffer[dtype](in_els)
 
 # Fill in the buffer with values from 0 to 16
-iota(in_host.unsafe_ptr(), in_bytes)
+iota(in_host.unsafe_ptr(), in_els)
 
 # Load all the data as a SIMD vector of width 16 and print it
-print(in_host.unsafe_ptr().load[width=in_bytes](0))
+print(in_host.unsafe_ptr().load[width=in_els](0))
 ```
 
 ```text
 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 ```
 
-In the last call where we print it using `load[width=in_bytes]` we're loading a SIMD vector of width 16. SIMD means `Single Instruction Multiple Data`, in Mojo all the core numerical dtypes are built around SIMD, allowing you to e.g. multiply a vector in a single instruction using special registers, instead of 16 instructions for each element.
+In the last call where we print it using `load[width=in_els]` we're loading a SIMD vector of width 16. SIMD means `Single Instruction Multiple Data`, in Mojo all the core numerical dtypes are built around SIMD, allowing you to e.g. multiply a vector in a single instruction using special registers, instead of 16 instructions for each element.
 
 ## Device Buffer
 
@@ -278,7 +278,7 @@ We now have a host buffer that we can copy to the GPU:
 
 ```mojo
 # Allocate a buffer for the GPU
-var in_dev = ctx.enqueue_create_buffer[dtype](in_bytes)
+var in_dev = ctx.enqueue_create_buffer[dtype](in_els)
 
 # Copy the data from the CPU to the GPU buffer
 in_host.enqueue_copy_to(in_dev)
