@@ -10,13 +10,52 @@ tag: intro-to-gpu
 
 Instead of going over theory first, we're going to dive straight into writing GPU code and explain the concepts as we go.
 
-## Your first kernel
+## Setup
 
-In the context of GPU programming, a kernel is a program that runs on each thread that you launch. There are various ways to communicate between threads, this is just a simple example to demonstrate what's happening:
+All of these notebook cells are runnable through a VS Code extension. First install [Markdown Lab](https://marketplace.visualstudio.com/items?itemName=jackos.mdlab), then clone the repo that contains the markdown that generated this website:
+
+```sh
+git clone git@github.com:jackos/intro-to-gpu
+cd intro-to-gpu
+```
+
+And open `intro-to-gpu.md`, then you can run the code cells interactively.
+
+If you prefer the traditional approach, create a file such as `main.mojo` and put everything except the imports into a `def main`:
+
+```mojo :once
+from gpu import thread_idx, DeviceContext
+
+def main():
+    fn printing_kernel():
+        print("GPU thread: [", thread_idx.x, thread_idx.y, thread_idx.z, "]")
+
+    var ctx = DeviceContext()
+
+    ctx.enqueue_function[printing_kernel](grid_dim=1, block_dim=4)
+    ctx.synchronize()
+```
+
+Then run the file e.g. `mojo main.mojo`, if you haven't setup Mojo yet, check out the [Getting Started](index.md) guide.
+
+## Imports
+
+These are all the imports required to run the examples, put this at the top of your file if you're running from `mojo main.mojo`:
 
 ```mojo
-from gpu import thread_idx
+from gpu import thread_idx, block_idx, warp, barrier
+from gpu.host import DeviceContext, DeviceBuffer
+from gpu.memory import AddressSpace, external_memory
+from layout import Layout, LayoutTensor
+from math import iota
+from sys import sizeof
+```
 
+## Your first kernel
+
+In the context of GPU programming, a kernel is a program that runs on each thread that you launch
+
+```mojo
 fn printing_kernel():
     print("GPU thread: [", thread_idx.x, thread_idx.y, thread_idx.z, "]")
 ```
@@ -24,8 +63,6 @@ fn printing_kernel():
 We can pass this function as a [parameter](glossary.md#parameter) to `enqueue_function` to compile it for your attached GPU and launch it. First we need to get the `DeviceContext` for your GPU:
 
 ```mojo
-from gpu.host import DeviceContext
-
 var ctx = DeviceContext()
 ```
 
@@ -39,10 +76,14 @@ ctx.synchronize()
 ```
 
 ```text
-GPU thread: [ 0 0 0 ]
-GPU thread: [ 1 0 0 ]
-GPU thread: [ 2 0 0 ]
-GPU thread: [ 3 0 0 ]
+Block 0 reduction steps:
+
+All blocks reduced output buffer:
+[6, 0, 22, 0]
+thread: 0 value: 0 result: 6
+thread: 1 value: 1 result: 6
+thread: 2 value: 2 result: 5
+thread: 3 value: 3 result: 3
 ```
 
 ## Threads
@@ -69,14 +110,15 @@ GPU thread: [ 1 1 1 ]
 
 We're now launching 8 (2x2x2) threads in total.
 
-## Host vs Device
+## Host vs Device and Enqueue
 
-If you see the `enqueue` word in a method call it means it's asynchronous, you have to await its completion where appropriate using `ctx.synchronize`. For example, if you were to print from the CPU without first calling `synchronize` the CPU will likely print out of order:
+You'll see the word `host` which refers to the CPU that schedules work for the `device`, `device` refers to the accelerator which in this case is a GPU.
+
+If you see the `enqueue` word in a method or function call it means the `host` is scheduling it run on the `device`. You must call `ctx.synchronize` if code you're running on the `host` is dependent on the result of the `device` enqueued calls. For example, if you were to print from the CPU without first calling `synchronize`, you'll see out-of-order printing:
 
 ```mojo :once
 ctx.enqueue_function[printing_kernel](grid_dim=1, block_dim=4)
 print("This will finish before the GPU has completed its work")
-ctx.synchronize()
 ```
 
 ```text
@@ -87,7 +129,7 @@ GPU thread: [ 2 0 0 ]
 GPU thread: [ 3 0 0 ]
 ```
 
-You'll see the word `host` which refers to the CPU that coordinates the kernel launches, `device` refers to the accelerator which in this case is a GPU. In the above example we failed to call `synchronize` before printing on the `host`, the `device` will be slightly slower to finish its work, so you see that output after the `host` output. Let's fix the placement of `synchronize`:
+In the above example we failed to call `synchronize` before printing on the `host`, the `device` will be slightly slower to finish its work, so you see that output after the `host` output. Let's add a `synchronize`:
 
 ```mojo :once
 ctx.enqueue_function[printing_kernel](grid_dim=1, block_dim=4)
@@ -103,13 +145,40 @@ GPU thread: [ 3 0 0 ]
 This will finish after the GPU has completed its work
 ```
 
+Note that any method or function you `enqueue` to run on the device, will run in the order that you enqueued them. It's only when you're doing something from the `host` which is dependent on the results of enqueued calls that you have to `synchronize`:
+
+```mojo
+alias size = 4
+alias type = DType.uint8
+
+
+fn dummy_kernel(buffer: DeviceBuffer[type]):
+    buffer[thread_idx.x] = thread_idx.x
+
+# More on buffers later
+var host_buffer = ctx.enqueue_create_host_buffer[type](size)
+var dev_buffer = ctx.enqueue_create_buffer[type](size)
+ctx.enqueue_function[dummy_kernel](dev_buffer, grid_dim=1, block_dim=size)
+dev_buffer.enqueue_copy_to(host_buffer)
+# All of the above calls run in the order that they were enqueued
+
+
+# Have to synchronize here before printing on CPU, or else the kernel will
+# not have finished execcuting.
+ctx.synchronize()
+
+for i in range(size):
+    print(host_buffer[i], end=" ")
+print()
+```
+
+```text
+0 1 2 3
+```
+
 ## Blocks
 
 Lets set up a new kernel to demonstrate how blocks work:
-
-```mojo
-from gpu import block_idx
-```
 
 ```mojo :once
 fn block_kernel():
@@ -135,20 +204,20 @@ block: [ 1 1 0 ] thread: [ 0 0 0 ]
 block: [ 1 1 0 ] thread: [ 1 0 0 ]
 block: [ 0 0 0 ] thread: [ 0 0 0 ]
 block: [ 0 0 0 ] thread: [ 1 0 0 ]
-block: [ 1 0 0 ] thread: [ 0 0 0 ]
-block: [ 1 0 0 ] thread: [ 1 0 0 ]
 block: [ 0 1 0 ] thread: [ 0 0 0 ]
 block: [ 0 1 0 ] thread: [ 1 0 0 ]
+block: [ 1 0 0 ] thread: [ 0 0 0 ]
+block: [ 1 0 0 ] thread: [ 1 0 0 ]
 ```
 
-We're still launching 8 (2x2x2) threads, where there are 4 blocks, each with 2 threads. In GPU programming this grouping of blocks and threads is important, each block has can have its own fast shared VRAM (Video Random Access Memory) which allows threads to communicate. The threads within a block can also communicate by through registers, we'll cover this concept when we get to `warps`. For now the important information to internalize is:
+We're still launching 8 (2x2x2) threads, where there are 4 blocks, each with 2 threads. In GPU programming this grouping of blocks and threads is important, each block can have its own fast shared VRAM (Video Random Access Memory) which allows threads to communicate. The threads within a block can also communicate by through registers, we'll cover this concept when we get to `warps`. For now the important information to internalize is:
 
 - `grid_dim` defines how many blocks are launched
 - `block_dim` defines how many threads are launched in each block
 
 ## Tiles
 
-The x, y, z dimensions of blocks are important for splitting up large jobs into `tiles` so each thread can work on its own subset of the problem. Lets visualize how a contiguous array of data can be split up into tiles, if we have an array of UInt8 (Unsigned Integer 8bit) data like:
+The x, y, z dimensions of blocks are important for splitting up large jobs into `tiles` so each thread can work on its own subset of the problem. Lets visualize how a contiguous array of data can be split up into tiles, if we have an array of UInt32 (Unsigned Integer 32bit) data like:
 
 ```plaintext
 [ 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 ]
@@ -179,15 +248,13 @@ And index (1, 0) would be:
 [ 6 7 ]
 ```
 
-This is where you'd introduce the y dimension, we'll cover this later but for now we're going to focus on how blocks and threads interact.
+This is where you'd introduce the y dimension. For now we're going to focus on how blocks and threads interact, splitting up an array into 1 row per block, and 1 value per thread.
 
 ## Host Buffer
 
 First we'll initialize that contiguous array on CPU and fill in the values:
 
 ```mojo
-from math import iota
-
 alias dtype = DType.uint32
 alias blocks = 4
 alias threads = 4
@@ -208,7 +275,7 @@ print(in_host.unsafe_ptr().load[width=in_bytes](0))
 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 ```
 
-In the last call where we print it using `load[width=in_bytes]` we're loading a SIMD vector of width 16. SIMD means `Single Instruction Multiple Data`, in Mojo all the core numerical dtypes are built around SIMD, allowing you to e.g. multiply a vector in a single instruction using special CPU registers, instead of 16 instructions for each element.
+In the last call where we print it using `load[width=in_bytes]` we're loading a SIMD vector of width 16. SIMD means `Single Instruction Multiple Data`, in Mojo all the core numerical dtypes are built around SIMD, allowing you to e.g. multiply a vector in a single instruction using special registers, instead of 16 instructions for each element.
 
 ## Device Buffer
 
@@ -219,7 +286,7 @@ We now have a host buffer that we can copy to the GPU:
 var in_dev = ctx.enqueue_create_buffer[dtype](in_bytes)
 
 # Copy the data from the CPU to the GPU buffer
-ctx.enqueue_copy(in_dev, in_host)
+in_host.enqueue_copy_to(in_dev)
 ```
 
 Creating the GPU buffer is allocating `global memory` which can be accessed from any block and thread, this memory is relatively slow compared to `shared memory` which is shared between blocks, more on that later.
@@ -229,13 +296,11 @@ Creating the GPU buffer is allocating `global memory` which can be accessed from
 Now that we have the data set up, we can wrap the data in a `LayoutTensor` so that we can reason about how to index into the array, allowing each thread to get its corresponding value:
 
 ```mojo
-from layout import Layout, LayoutTensor
-
 # Row major: elements are stored sequentially in memory [0, 1, 2, 3, 4, 5, ...]
 # Column major: used in some GPU optimizations, stored as [0, 4, 8, 12, 1, ...]
 alias layout = Layout.row_major(blocks, threads)
 
-var tensor = LayoutTensor[dtype, layout](in_dev.unsafe_ptr())
+var tensor = LayoutTensor[dtype, layout](in_dev)
 ```
 
 This `LayoutTensor` is a mutable view over the data stored inside `in_dev`, it doesn't own its memory but allows us to index using block and thread ids. Initially we'll just print the values to confirm its indexing as we expect:
@@ -257,14 +322,14 @@ block: 3 thread: 0 val: 12
 block: 3 thread: 1 val: 13
 block: 3 thread: 2 val: 14
 block: 3 thread: 3 val: 15
-block: 0 thread: 0 val: 0
-block: 0 thread: 1 val: 1
-block: 0 thread: 2 val: 2
-block: 0 thread: 3 val: 3
 block: 2 thread: 0 val: 8
 block: 2 thread: 1 val: 9
 block: 2 thread: 2 val: 10
 block: 2 thread: 3 val: 11
+block: 0 thread: 0 val: 0
+block: 0 thread: 1 val: 1
+block: 0 thread: 2 val: 2
+block: 0 thread: 3 val: 3
 block: 1 thread: 0 val: 4
 block: 1 thread: 1 val: 5
 block: 1 thread: 2 val: 6
@@ -286,19 +351,20 @@ ctx.enqueue_function[multiply_kernel[2]](
     grid_dim=blocks,
     block_dim=threads,
 )
-ctx.synchronize()
 
 # Copy data back to host and print as 2D array
-ctx.copy(in_host, in_dev)
-var host_tensor = LayoutTensor[dtype, layout](in_host.unsafe_ptr())
+in_dev.enqueue_copy_to(in_host)
+ctx.synchronize()
+
+var host_tensor = LayoutTensor[dtype, layout](in_host)
 print(host_tensor)
 ```
 
 ```text
-0 2 4 6 
-8 10 12 14 
-16 18 20 22 
-24 26 28 30 
+0 2 4 6
+8 10 12 14
+16 18 20 22
+24 26 28 30
 ```
 
 Congratulations! You've successfully run a kernel that modifies values from your GPU, and printed the result on your CPU. You can see above that each thread multiplied a single value by 2 in parallel on the GPU, and copied the result back to the CPU.
@@ -311,16 +377,14 @@ We're going to set up a new buffer which will have all the reduced values with t
 Output: [ block[0] block[0] block[1] block[1] ]
 ```
 
-There's no need for a layout tensor here as it's a 1D array:
+Set up the output buffer for the host and device:
 
 ```mojo
-# Allocate to global memory
+var out_host = ctx.enqueue_create_host_buffer[dtype](blocks)
 var out_dev = ctx.enqueue_create_buffer[dtype](blocks)
 
-# Also create a buffer for the host
-var out_host = ctx.enqueue_create_host_buffer[dtype](blocks)
-
-ctx.synchronize()
+# Zero the values on the device as they'll be used to accumulate results
+ctx.enqueue_memset(out_dev, 0)
 ```
 
 The problem here is that we can't have all the threads summing their values into the same index in the output buffer as that will introduce race conditions. We're going to introduce new concepts to deal with this.
@@ -328,13 +392,6 @@ The problem here is that we can't have all the threads summing their values into
 ## Shared memory
 
 This is not an optimal solution, but it's a good way to introduce shared memory in a simple example, we'll cover better solutions in the next sections. You can allocate data for each block when launching a kernel, this is called shared memory and every thread within a block can communicate using it.
-
-```mojo
-from gpu import barrier, lane_id
-from gpu.memory import AddressSpace, external_memory
-from sys import sizeof
-from gpu.host import DeviceBuffer
-```
 
 ```mojo :once
 fn sum_reduce_kernel(
@@ -365,10 +422,11 @@ ctx.enqueue_function[sum_reduce_kernel](
     block_dim=threads,
     shared_mem_bytes=blocks * sizeof[dtype](), # Shared memory between blocks
 )
-ctx.synchronize()
 
 # Copy the data back to the host and print out the SIMD vector
-ctx.copy(out_host, out_dev)
+out_dev.enqueue_copy_to(out_host)
+ctx.synchronize()
+
 print(out_host.unsafe_ptr().load[width=blocks]())
 ```
 
@@ -393,10 +451,14 @@ And the reduction resulted in the output having the sum of 6 in the first positi
 We could skip using shared memory altogether using SIMD instructions, this is a faster option to consider if it suits your problem. Each thread has access to SIMD registers which can perform operations on a vector such as reductions. Here we'll be launching one thread per block, loading the 4 corresponding values from that block as a SIMD vector, and summing them together in a single operation:
 
 ```mojo :once
+
 fn simd_reduce_kernel(
     tensor: LayoutTensor[dtype, layout], out_buffer: DeviceBuffer[dtype]
 ):
     out_buffer[block_idx.x] = tensor.load[4](block_idx.x, 0).reduce_add()
+
+# Reset the output values first
+ctx.enqueue_memset(out_dev, 0)
 
 ctx.enqueue_function[simd_reduce_kernel](
     tensor,
@@ -404,10 +466,11 @@ ctx.enqueue_function[simd_reduce_kernel](
     grid_dim=blocks,
     block_dim=1, # one thread per block
 )
-ctx.synchronize()
 
 # Ensure we have the same result
-ctx.copy(out_host, out_dev)
+out_dev.enqueue_copy_to(out_host)
+ctx.synchronize()
+
 print(out_host.unsafe_ptr().load[width=blocks]())
 ```
 
@@ -423,27 +486,22 @@ A `warp` is a group of threads (32 on NVIDIA, 64 on AMD) within a block. Threads
 
 Lets write your first warp reduction kernel:
 
-```mojo
-from gpu import warp
-```
-
 ```mojo :once
 fn warp_reduce_kernel(
     tensor: LayoutTensor[dtype, layout], out_buffer: DeviceBuffer[dtype]
 ):
-    # Warp operations don't support UInt8, so we cast to UInt32
     var value = tensor.load[1](block_idx.x, thread_idx.x)
 
     # Each thread gets the value from one thread higher, summing them as they go
-    var result = warp.sum(value)
+    value = warp.sum(value)
 
-    # Wait for all the threads in the warp to finish reducing
     barrier()
 
     # Thread 0 has the reduced sum of the values from all the other threads
     if thread_idx.x == 0:
-        out_buffer[block_idx.x] = result
+        out_buffer[block_idx.x] = value
 
+ctx.enqueue_memset(out_dev, 0)
 
 ctx.enqueue_function[warp_reduce_kernel](
     tensor,
@@ -454,7 +512,9 @@ ctx.enqueue_function[warp_reduce_kernel](
 ctx.synchronize()
 
 # Ensure we have the same result
-ctx.copy(out_host, out_dev)
+out_dev.enqueue_copy_to(out_host)
+ctx.synchronize()
+
 print(out_host.unsafe_ptr().load[width=blocks]())
 ```
 
@@ -520,6 +580,7 @@ ctx.enqueue_function[custom_warp_reduce_kernel](
 # Check our new result
 print("Block 0 reduction steps:")
 ctx.copy(out_host, out_dev)
+ctx.synchronize()
 
 print("\nAll blocks reduced output buffer:")
 print(out_host.unsafe_ptr().load[width=blocks]())
@@ -555,4 +616,4 @@ Now that you've learnt some of the core primitives for GPU programming, here are
 4. Launch a GPU kernel with 8 blocks and 4 threads that takes every value and raises it to the power of 2 using x**2, then does a reduction using your preferred method to write to the output buffer.
 5. Copy the device buffer to the host buffer, and print it out on the CPU.
 
-More coming soon!
+Next chapter coming soon!
