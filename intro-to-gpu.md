@@ -96,11 +96,11 @@ print("This will finish after the GPU has completed its work")
 ```
 
 ```text
+This will finish after the GPU has completed its work
 GPU thread: [ 0 0 0 ]
 GPU thread: [ 1 0 0 ]
 GPU thread: [ 2 0 0 ]
 GPU thread: [ 3 0 0 ]
-This will finish after the GPU has completed its work
 ```
 
 ## Blocks
@@ -131,12 +131,12 @@ ctx.synchronize()
 ```
 
 ```text
-block: [ 1 1 0 ] thread: [ 0 0 0 ]
-block: [ 1 1 0 ] thread: [ 1 0 0 ]
 block: [ 0 0 0 ] thread: [ 0 0 0 ]
 block: [ 0 0 0 ] thread: [ 1 0 0 ]
 block: [ 1 0 0 ] thread: [ 0 0 0 ]
 block: [ 1 0 0 ] thread: [ 1 0 0 ]
+block: [ 1 1 0 ] thread: [ 0 0 0 ]
+block: [ 1 1 0 ] thread: [ 1 0 0 ]
 block: [ 0 1 0 ] thread: [ 0 0 0 ]
 block: [ 0 1 0 ] thread: [ 1 0 0 ]
 ```
@@ -235,7 +235,7 @@ from layout import Layout, LayoutTensor
 # Column major: used in some GPU optimizations, stored as [0, 4, 8, 12, 1, ...]
 alias layout = Layout.row_major(blocks, threads)
 
-var tensor = LayoutTensor[dtype, layout](in_dev.unsafe_ptr())
+var tensor = LayoutTensor[dtype, layout](in_dev)
 ```
 
 This `LayoutTensor` is a mutable view over the data stored inside `in_dev`, it doesn't own its memory but allows us to index using block and thread ids. Initially we'll just print the values to confirm its indexing as we expect:
@@ -253,22 +253,22 @@ ctx.synchronize()
 ```
 
 ```text
-block: 3 thread: 0 val: 12
-block: 3 thread: 1 val: 13
-block: 3 thread: 2 val: 14
-block: 3 thread: 3 val: 15
 block: 0 thread: 0 val: 0
 block: 0 thread: 1 val: 1
 block: 0 thread: 2 val: 2
 block: 0 thread: 3 val: 3
-block: 2 thread: 0 val: 8
-block: 2 thread: 1 val: 9
-block: 2 thread: 2 val: 10
-block: 2 thread: 3 val: 11
 block: 1 thread: 0 val: 4
 block: 1 thread: 1 val: 5
 block: 1 thread: 2 val: 6
 block: 1 thread: 3 val: 7
+block: 3 thread: 0 val: 12
+block: 3 thread: 1 val: 13
+block: 3 thread: 2 val: 14
+block: 3 thread: 3 val: 15
+block: 2 thread: 0 val: 8
+block: 2 thread: 1 val: 9
+block: 2 thread: 2 val: 10
+block: 2 thread: 3 val: 11
 ```
 
 As in the visualization above, the block/thread is getting the corresponding value that we expect. You can see `block: 3 thread: 3` has the last value 15.
@@ -290,7 +290,7 @@ ctx.synchronize()
 
 # Copy data back to host and print as 2D array
 ctx.copy(in_host, in_dev)
-var host_tensor = LayoutTensor[dtype, layout](in_host.unsafe_ptr())
+var host_tensor = LayoutTensor[dtype, layout](in_host)
 print(host_tensor)
 ```
 
@@ -311,16 +311,23 @@ We're going to set up a new buffer which will have all the reduced values with t
 Output: [ block[0] block[0] block[1] block[1] ]
 ```
 
-There's no need for a layout tensor here as it's a 1D array:
+Set up the output buffer for the host and device:
 
 ```mojo
-# Allocate to global memory
-var out_dev = ctx.enqueue_create_buffer[dtype](blocks)
+from memory import memset_zero
 
-# Also create a buffer for the host
 var out_host = ctx.enqueue_create_host_buffer[dtype](blocks)
 
-ctx.synchronize()
+# We're accumulating values into the buffer so initialize to 0
+memset_zero(out_host.unsafe_ptr(), blocks)
+
+# Create a device buffer and copy in the zeroed values
+var out_dev = ctx.enqueue_create_buffer[dtype](blocks)
+ctx.enqueue_copy(out_dev, out_host)
+
+# Wrap in a 1D tensor
+alias out_layout = Layout.row_major(blocks)
+var out_tensor = LayoutTensor[dtype, out_layout](out_dev)
 ```
 
 The problem here is that we can't have all the threads summing their values into the same index in the output buffer as that will introduce race conditions. We're going to introduce new concepts to deal with this.
@@ -338,7 +345,7 @@ from gpu.host import DeviceBuffer
 
 ```mojo :once
 fn sum_reduce_kernel(
-    tensor: LayoutTensor[dtype, layout], out_buffer: DeviceBuffer[dtype]
+    tensor: LayoutTensor[dtype, layout], out_tensor: LayoutTensor[dtype, out_layout]
 ):
     # Get a pointer to shared memory for the indices and values
     var shared = external_memory[
@@ -356,19 +363,20 @@ fn sum_reduce_kernel(
     # If this is the first thread, sum and write the result to global memory
     if thread_idx.x == 0:
         for i in range(threads):
-            out_buffer[block_idx.x] += shared[i]
+            out_tensor[block_idx.x] += shared[i]
 
 ctx.enqueue_function[sum_reduce_kernel](
     tensor,
-    out_dev,
+    out_tensor,
     grid_dim=blocks,
     block_dim=threads,
     shared_mem_bytes=blocks * sizeof[dtype](), # Shared memory between blocks
 )
-ctx.synchronize()
 
 # Copy the data back to the host and print out the SIMD vector
-ctx.copy(out_host, out_dev)
+ctx.enqueue_copy(out_host, out_dev)
+ctx.synchronize()
+
 print(out_host.unsafe_ptr().load[width=blocks]())
 ```
 
@@ -394,20 +402,21 @@ We could skip using shared memory altogether using SIMD instructions, this is a 
 
 ```mojo :once
 fn simd_reduce_kernel(
-    tensor: LayoutTensor[dtype, layout], out_buffer: DeviceBuffer[dtype]
+    tensor: LayoutTensor[dtype, layout], out_tensor: LayoutTensor[dtype, out_layout]
 ):
-    out_buffer[block_idx.x] = tensor.load[4](block_idx.x, 0).reduce_add()
+    out_tensor[block_idx.x] = tensor.load[4](block_idx.x, 0).reduce_add()
 
 ctx.enqueue_function[simd_reduce_kernel](
     tensor,
-    out_dev,
+    out_tensor,
     grid_dim=blocks,
     block_dim=1, # one thread per block
 )
-ctx.synchronize()
 
 # Ensure we have the same result
-ctx.copy(out_host, out_dev)
+ctx.enqueue_copy(out_host, out_dev)
+ctx.synchronize()
+
 print(out_host.unsafe_ptr().load[width=blocks]())
 ```
 
@@ -429,9 +438,8 @@ from gpu import warp
 
 ```mojo :once
 fn warp_reduce_kernel(
-    tensor: LayoutTensor[dtype, layout], out_buffer: DeviceBuffer[dtype]
+    tensor: LayoutTensor[dtype, layout], out_tensor: LayoutTensor[dtype, layout]
 ):
-    # Warp operations don't support UInt8, so we cast to UInt32
     var value = tensor.load[1](block_idx.x, thread_idx.x)
 
     # Each thread gets the value from one thread higher, summing them as they go
@@ -442,24 +450,30 @@ fn warp_reduce_kernel(
 
     # Thread 0 has the reduced sum of the values from all the other threads
     if thread_idx.x == 0:
-        out_buffer[block_idx.x] = result
+        print(result)
+        out_tensor[block_idx.x] = result
 
 
 ctx.enqueue_function[warp_reduce_kernel](
     tensor,
-    out_dev,
+    out_tensor,
     grid_dim=blocks,
     block_dim=threads,
 )
-ctx.synchronize()
 
 # Ensure we have the same result
-ctx.copy(out_host, out_dev)
-print(out_host.unsafe_ptr().load[width=blocks]())
+ctx.enqueue_copy(out_host, out_tensor.ptr)
+ctx.synchronize()
+
+print(out_tensor)
 ```
 
 ```text
-[6, 22, 38, 54]
+6 0 22 0
+6
+38
+54
+22
 ```
 
 It might not be immediately clear what's happening with the `warp.sum` function, so let's break it down with print statements:
@@ -498,7 +512,7 @@ fn custom_reduce[
 ](lhs: SIMD[type, width], rhs: SIMD[type, width]) -> SIMD[type, width]:
     return lhs + rhs
 
-fn custom_warp_reduce_kernel(tensor: LayoutTensor[dtype, layout], out_buffer: DeviceBuffer[dtype]):
+fn custom_warp_reduce_kernel(tensor: LayoutTensor[dtype, layout], out_tensor: LayoutTensor[dtype, layout]):
     var value = tensor.load[1](block_idx.x, thread_idx.x)
     var result = warp.reduce[warp.shuffle_down, custom_reduce](value)
 
@@ -508,11 +522,11 @@ fn custom_warp_reduce_kernel(tensor: LayoutTensor[dtype, layout], out_buffer: De
         print("thread:", thread_idx.x, "value:", value, "result:", result)
 
     if thread_idx.x == 0:
-        out_buffer[block_idx.x] = result
+        out_tensor[block_idx.x] = result
 
 ctx.enqueue_function[custom_warp_reduce_kernel](
     tensor,
-    out_dev,
+    out_tensor,
     grid_dim=blocks,
     block_dim=threads,
 )
@@ -520,6 +534,7 @@ ctx.enqueue_function[custom_warp_reduce_kernel](
 # Check our new result
 print("Block 0 reduction steps:")
 ctx.copy(out_host, out_dev)
+ctx.synchronize()
 
 print("\nAll blocks reduced output buffer:")
 print(out_host.unsafe_ptr().load[width=blocks]())
@@ -527,13 +542,13 @@ print(out_host.unsafe_ptr().load[width=blocks]())
 
 ```text
 Block 0 reduction steps:
+
+All blocks reduced output buffer:
+[6, 0, 22, 0]
 thread: 0 value: 0 result: 6
 thread: 1 value: 1 result: 6
 thread: 2 value: 2 result: 5
 thread: 3 value: 3 result: 3
-
-All blocks reduced output buffer:
-[6, 22, 38, 54]
 ```
 
 You can see in the output that the first block had the values [ 0 1 2 3 ] and was reduced from top to bottom (shuffle down) in this way, where the result of one thread is passed to the next thread down:
