@@ -8,10 +8,10 @@ tag: intro-to-gpu
 
 # Introduction to GPU programming
 
-This course is designed for a wide audience, whether you're a CUDA developer or a programmer who's never touched GPU code before. If you’re already familiar with CUDA development, feel free to skip the gray text bubbles and dive straight into the code examples.
+This course is designed for a wide audience, whether you're a CUDA/ROCm developer, or a programmer who's never touched GPU code before. Mojo allows you to program NVIDIA and AMD GPUs, with direct access to low-level GPU primitives using the same programming model. If you're coming from the CUDA ecosystem, what you'll learn here will enable you to expand your reach to to more hardware. If you’re already familiar with CUDA or ROCm development, feel free to skip the gray text bubbles and dive straight into the code examples.
 
 ::: info Parallel programming
-We've hit a wall with new generations of CPUs increasing clock speeds. Power demands and heat dissipation limits have stalled that trend, pushing the hardware industry toward increasing the amount of physical cores. Modern consumer CPUs now boast 16 cores or more, capable of running in parallel, which forces programmers to rethink how they maximize performance. This shift is especially evident in AI applications, which are "embarrassingly parallel", their performance scales remarkably well with additional cores.
+We've hit a wall with new generations of CPUs increasing clock speeds. Power demands and heat dissipation limits have stalled that trend, pushing the hardware industry toward increasing the amount of physical cores. Modern consumer CPUs now boast 16 cores or more, capable of running in parallel, which forces programmers to rethink how they maximize performance. This shift is especially evident in AI applications, their performance scales remarkably well with additional cores.
 
 NVIDIA’s breakthrough came with CUDA, a general programming model that allows developers to target both server and consumer GPUs for any application domain. This vision sparked an AI revolution when Alex Krizhevsky, Ilya Sutskever, and Geoffrey Hinton trained AlexNet on consumer NVIDIA GTX 580 and 680 GPUs, significantly outperforming traditional computer vision methods. GPUs pack thousands of cores, the NVIDIA H100 can run 16,896 threads in parallel in a single clock cycle, with over 270,000 threads queued and ready to go.
 
