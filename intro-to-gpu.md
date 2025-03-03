@@ -8,11 +8,21 @@ tag: intro-to-gpu
 
 # Introduction to GPU programming
 
-Instead of going over theory first, we're going to dive straight into writing GPU code and explain the concepts as we go.
+This course is designed for a wide audience, whether you're a CUDA developer or a programmer who's never touched GPU code before. If you’re already familiar with CUDA development, feel free to skip the gray text bubbles and dive straight into the code examples.
 
-## Setup
+::: info Parallel programming
+We've hit a wall with new generations of CPUs increasing clock speeds. Power demands and heat dissipation limits have stalled that trend, pushing the hardware industry toward increasing the amount of physical cores. Modern consumer CPUs now boast 16 cores or more, capable of running in parallel, which forces programmers to rethink how they maximize performance. This shift is especially evident in AI applications, which are "embarrassingly parallel", their performance scales remarkably well with additional cores.
 
-All of these notebook cells are runnable through a VS Code extension. First install [Markdown Lab](https://marketplace.visualstudio.com/items?itemName=jackos.mdlab), then clone the repo that contains the markdown that generated this website:
+NVIDIA’s breakthrough came with CUDA, a general programming model that allows developers to target both server and consumer GPUs for any application domain. This vision sparked an AI revolution when Alex Krizhevsky, Ilya Sutskever, and Geoffrey Hinton trained AlexNet on consumer NVIDIA GTX 580 and 680 GPUs, significantly outperforming traditional computer vision methods. GPUs pack thousands of cores, the NVIDIA H100 can run 16,896 threads in parallel in a single clock cycle, with over 270,000 threads queued and ready to go.
+
+Harnessing this hardware demands a new programming mindset. Mojo represents a chance to rethink GPU programming and make it more approachable. C++ is at the core of CUDA, but we’ve seen leaps in ergonomics and memory safety from systems programming languages like Rust. Mojo aims to bring Python’s familiar syntax, add direct access to low-level CPU and GPU intrinsics for systems programming, and introduce ergonomic and safety improvements from languages like Rust. This course aims to empower programmers with minimal specialized knowledge to build high-performance GPU-enabled applications. By lowering the barrier to entry, we aim to fuel more breakthroughs and accelerate innovation.
+:::
+
+These blue text bubbles contain setup information and tips.
+
+::: tip Setup
+
+All of these notebook cells are runnable through a VS Code extension. You can install [Markdown Lab](https://marketplace.visualstudio.com/items?itemName=jackos.mdlab), then clone the repo that contains the markdown that generated this website:
 
 ```sh
 git clone git@github.com:jackos/intro-to-gpu
@@ -37,6 +47,8 @@ def main():
 ```
 
 Then run the file e.g. `mojo main.mojo`, if you haven't setup Mojo yet, check out the [Getting Started](index.md) guide.
+
+:::
 
 ## Imports
 
@@ -168,8 +180,15 @@ print()
 ```
 
 ```text
-0 1 2 3 
+0 1 2 3
 ```
+
+These orange text bubbles contain important information to remember, in order to not cause segfaults and other safety violations.
+
+::: warning Synchronization
+
+If your using the results of any `enqueue` calls from the CPU, you must synchronize before doing anything that is dependent on what you're enqueuing. Enqueueing multiple method or function calls for a single GPU is safe, as they are scheduled to run in the order you call them.
+:::
 
 ## Blocks
 
@@ -205,7 +224,7 @@ block: [ 1 0 0 ] thread: [ 0 0 0 ]
 block: [ 1 0 0 ] thread: [ 1 0 0 ]
 ```
 
-We're still launching 8 (2x2x2) threads, where there are 4 blocks, each with 2 threads. In GPU programming this grouping of blocks and threads is important, each block can have its own fast shared VRAM (Video Random Access Memory) which allows threads to communicate. The threads within a block can also communicate by through registers, we'll cover this concept when we get to `warps`. For now the important information to internalize is:
+We're still launching 8 (2x2x2) threads, where there are 4 blocks, each with 2 threads. In GPU programming this grouping of blocks and threads is important, each block can have its own fast SRAM (Static Random Access Memory) which allows threads to communicate. The threads within a block can also communicate through registers, we'll cover this concept when we get to `warps`. For now the important information to internalize is:
 
 - `grid_dim` defines how many blocks are launched
 - `block_dim` defines how many threads are launched in each block
@@ -356,10 +375,10 @@ print(host_tensor)
 ```
 
 ```text
-0 2 4 6 
-8 10 12 14 
-16 18 20 22 
-24 26 28 30 
+0 2 4 6
+8 10 12 14
+16 18 20 22
+24 26 28 30
 ```
 
 Congratulations! You've successfully run a kernel that modifies values from your GPU, and printed the result on your CPU. You can see above that each thread multiplied a single value by 2 in parallel on the GPU, and copied the result back to the CPU.
