@@ -8,11 +8,22 @@ tag: intro-to-gpu
 
 # Introduction to GPU programming
 
-Instead of going over theory first, we're going to dive straight into writing GPU code and explain the concepts as we go.
+This course is designed for both CUDA developers and programmers that have never written code for a GPU, if you come from a CUDA background you can skip over these gray text bubbles and instead focus on the code.
 
-## Setup
+::: info Parallel programming
+Programmers can no longer rely on new generations of CPUs to improve the performance of their programs. We've hit a wall with increasing clock speeds due to power requirements and heat dissipation limitations, this has shifted focus and progress to increase the amount of physical cores. Consumer CPUs now commonly contain 16 physical cores and beyond which can run in parallel, changing the model in which programmers have to think to maximize performance. The most demanding applications have become AI applications which are "embarrassingly parallel", meaning that the performance scales extremely well with the amount of extra cores.
 
-All of these notebook cells are runnable through a VS Code extension. First install [Markdown Lab](https://marketplace.visualstudio.com/items?itemName=jackos.mdlab), then clone the repo that contains the markdown that generated this website:
+NVIDIA's greatest insight was that they could enable a general programming model through CUDA to allow users to write applications for any domain on both their server and consumer GPUs. This led to the explosion of AI capability when Alex Krizhevsky, Ilya Sutskever, and Geoffrey Hinton trained AlexNet on NVIDIA GTX 580 and 680 consumer GPUs, which dramatically outperformed traditional computer vision approaches. A GPU has many more physical cores than a traditional CPU, for example the NVIDIA H100 can have 16,896 threads running in parallel in a single clock cycle, while allowing over 270,000 threads to be loaded and ready to run.
+
+Taking advantage of this specialized hardware requires a different mental model for programming. Mojo represents an opportunity to completely rethink that programming model to make it more accessible. The world of programming has seen many improvements to both ergonomics and memory safety since the domination of C++ for systems programming. Not all of these improvements are mappable to GPU programming, as these are performance focussed applications which need to opt for performance where an ergonomic or memory safety tradeoff exists. Mojo's main goal as a language is to have a familiar syntax for Python developers, with the safety and ergonomic improvements of modern systems programming languages like Rust, and allow you to directly use GPU primitives. This creates a stepping stone for programmers with much lower levels of specialized knowledge to write performant AI applications. That is the aim of this course, to enable a much larger demographic of programmers to write GPU and AI software. We believe this will enable more breakthroughs and accelerate progress.
+:::
+
+These blue text bubbles contain setup information and tips.
+
+::: tip Setup
+
+
+All of these notebook cells are runnable through a VS Code extension. You can install [Markdown Lab](https://marketplace.visualstudio.com/items?itemName=jackos.mdlab), then clone the repo that contains the markdown that generated this website:
 
 ```sh
 git clone git@github.com:jackos/intro-to-gpu
@@ -37,6 +48,8 @@ def main():
 ```
 
 Then run the file e.g. `mojo main.mojo`, if you haven't setup Mojo yet, check out the [Getting Started](index.md) guide.
+
+:::
 
 ## Imports
 
@@ -81,6 +94,7 @@ GPU thread: [ 1 0 0 ]
 GPU thread: [ 2 0 0 ]
 GPU thread: [ 3 0 0 ]
 ```
+
 
 ## Threads
 
@@ -170,6 +184,13 @@ print()
 ```text
 0 1 2 3 
 ```
+
+These orange text bubbles contain important information to remember, in order to not cause segfaults and other safety violations.
+
+::: warning Synchronization
+
+If your using the results of any `enqueue` calls from the CPU, you must synchronize before doing anything that is dependent on what you're enqueuing. Enqueueing multiple method or function calls for a single GPU is safe, as they are scheduled to run in the order you call them.
+:::
 
 ## Blocks
 
