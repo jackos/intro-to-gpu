@@ -173,14 +173,11 @@ dev_buffer.enqueue_copy_to(host_buffer)
 # Have to synchronize here before printing on CPU, or else the kernel will
 # not have finished execcuting.
 ctx.synchronize()
-
-for i in range(size):
-    print(host_buffer[i], end=" ")
-print()
+print(host_buffer)
 ```
 
 ```text
-0 1 2 3
+DeviceBuffer([0, 1, 2, 3])
 ```
 
 These orange text bubbles contain important information to remember, in order to not cause segfaults and other safety violations.
@@ -278,15 +275,16 @@ alias in_els = blocks * threads
 # Allocate data on the host and return a buffer which owns that data
 var in_host = ctx.enqueue_create_host_buffer[dtype](in_els)
 
-# Fill in the buffer with values from 0 to 16
-iota(in_host.unsafe_ptr(), in_els)
+# Ensure the host buffer has finished being created
+ctx.synchronize()
 
-# Load all the data as a SIMD vector of width 16 and print it
-print(in_host.unsafe_ptr().load[width=in_els](0))
+# Fill in the buffer with values from 0 to 15 and print it
+iota(in_host.unsafe_ptr(), in_els)
+print(in_host)
 ```
 
 ```text
-[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+DeviceBuffer([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15])
 ```
 
 In the last call where we print it using `load[width=in_els]` we're loading a SIMD vector of width 16. SIMD means `Single Instruction Multiple Data`, in Mojo all the core numerical dtypes are built around SIMD, allowing you to e.g. multiply a vector in a single instruction using special registers, instead of 16 instructions for each element.
@@ -375,10 +373,10 @@ print(host_tensor)
 ```
 
 ```text
-0 2 4 6
-8 10 12 14
-16 18 20 22
-24 26 28 30
+0 2 4 6 
+8 10 12 14 
+16 18 20 22 
+24 26 28 30 
 ```
 
 Congratulations! You've successfully run a kernel that modifies values from your GPU, and printed the result on your CPU. You can see above that each thread multiplied a single value by 2 in parallel on the GPU, and copied the result back to the CPU.
@@ -441,11 +439,11 @@ ctx.enqueue_function[sum_reduce_kernel](
 out_dev.enqueue_copy_to(out_host)
 ctx.synchronize()
 
-print(out_host.unsafe_ptr().load[width=blocks]())
+print(out_host)
 ```
 
 ```text
-[6, 22, 38, 54]
+DeviceBuffer([6, 22, 38, 54])
 ```
 
 For our first block/tile we summed the values:
@@ -485,11 +483,11 @@ ctx.enqueue_function[simd_reduce_kernel](
 out_dev.enqueue_copy_to(out_host)
 ctx.synchronize()
 
-print(out_host.unsafe_ptr().load[width=blocks]())
+print(out_host)
 ```
 
 ```text
-[6, 22, 38, 54]
+DeviceBuffer([6, 22, 38, 54])
 ```
 
 This is much cleaner and faster, instead of 4 threads writing to shared memory, we're using 1 thread per block to do a single SIMD reduction. Shared memory has many uses, but as you learn more tools you'll be able decipher which is the most performant for your particular problem.
@@ -529,11 +527,11 @@ ctx.synchronize()
 out_dev.enqueue_copy_to(out_host)
 ctx.synchronize()
 
-print(out_host.unsafe_ptr().load[width=blocks]())
+print(out_host)
 ```
 
 ```text
-[6, 22, 38, 54]
+DeviceBuffer([6, 22, 38, 54])
 ```
 
 It might not be immediately clear what's happening with the `warp.sum` function, so let's break it down with print statements:
@@ -584,6 +582,7 @@ fn custom_warp_reduce_kernel(tensor: LayoutTensor[dtype, layout], out_buffer: De
     if thread_idx.x == 0:
         out_buffer[block_idx.x] = result
 
+print("Block 0 reduction steps:")
 ctx.enqueue_function[custom_warp_reduce_kernel](
     tensor,
     out_dev,
@@ -592,12 +591,11 @@ ctx.enqueue_function[custom_warp_reduce_kernel](
 )
 
 # Check our new result
-print("Block 0 reduction steps:")
-ctx.copy(out_host, out_dev)
+out_host.enqueue_copy_to(out_dev)
 ctx.synchronize()
 
 print("\nAll blocks reduced output buffer:")
-print(out_host.unsafe_ptr().load[width=blocks]())
+print(out_host)
 ```
 
 ```text
@@ -608,10 +606,10 @@ thread: 2 value: 2 result: 5
 thread: 3 value: 3 result: 3
 
 All blocks reduced output buffer:
-[6, 22, 38, 54]
+DeviceBuffer([0, 1, 2, 3])
 ```
 
-You can see in the output that the first block had the values [ 0 1 2 3 ] and was reduced from top to bottom (shuffle down) in this way, where the result of one thread is passed to the next thread down:
+You can see in the output that the first block had the values [0 1 2 3] and was reduced from top to bottom (shuffle down) in this way, where the result of one thread is passed to the next thread down:
 
 ```plaintext
 thread 3: value=3   next_value=N/A   result=3

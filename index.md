@@ -83,50 +83,6 @@ magic run hello
 Hello Mojo🔥
 ```
 
-## Adding Community Packages
-
-`max` is the official Modular package that allows you to write GPU kernels standalone with Mojo, or call them from Python. Let's modify the version to be a wildcard so it'll use the latest compatible version with any community packages we add:
-
-```sh
-magic add "max==*"
-```
-
-```text
-✔ Added max==*
-```
-
-And add a community package to the project:
-
-```sh
-magic add emberjson
-```
-
-```text
-✔ Added emberjson >=0.1.1,<0.2
-```
-
-Update the `hello.mojo` file to use the community package:
-
-```mojo :create=hello/hello.mojo
-from emberjson import parse
-
-def main():
-    json = parse('{"Hello": "Mojo🔥"}')
-    print(json["Hello"])
-```
-
-And run it again with:
-
-```sh
-magic run hello
-```
-
-```text
-"Mojo🔥"
-```
-
-You can find curated Mojo community packages at [builds.modular.com](https://builds.modular.com/?category=packages).
-
 ## The `mojoproject.toml` File
 
 This file has been modified automatically while we've been running commands to update our project:
@@ -136,7 +92,6 @@ This file has been modified automatically while we've been running commands to u
 ...
 channels = [
     "https://conda.modular.com/max-nightly",
-    "https://repo.prefix.dev/modular-community",
     "conda-forge"
 ]
 name = "hello"
@@ -148,7 +103,6 @@ hello = "mojo run hello.mojo"
 
 [dependencies]
 max = "*"
-emberjson = ">=0.1.1,<0.2"
 ```
 
 You can modify this file directly to add more dependencies and tasks.
